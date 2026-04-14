@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Face Recognition Attendance</title>
+   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Face Recognition Attendance System</h1>
+            <p>College Attendance Management</p>
+            <div style="background: rgba(255, 193, 7, 0.1); padding: 10px 15px; border-radius: 10px; margin-top: 10px; border-left: 4px solid #ffc107; display: inline-block;">
+                <small style="color: #f57c00; font-weight: 500;">📝 Not enrolled? Contact your faculty member or administrator for enrollment.</small>
+            </div>
+        </header>
+
+        <!-- Quick Actions -->
+        <div class="card">
+            <h2>🚀 Quick Actions</h2>
+            <a href="/login" target="_blank" class="btn" style="margin-right: 10px;">🔐 Faculty Login</a>
+            <a href="/view_attendance" class="btn" style="margin-right: 10px;">📊 View Attendance Records</a>
+            {% if session.role == 'admin' %}
+                <a href="/manage_users" class="btn">🛠 Manage Users</a>
+            {% endif %}
+        </div>
+
+        <!-- Attendance Form -->
+        <div class="card">
+            <h2>📸 Mark Attendance</h2>
+            <div class="form-group">
+                <label>Session ID:</label>
+                <input type="text" id="session_id" required>
+            </div>
+            <div class="form-group">
+                <label>Student ID:</label>
+                <input type="text" id="student_id" required>
+                <button id="check-enrolled-btn" class="btn" style="margin-left: 10px;">Check Enrollment</button>
+            </div>
+            <div class="form-group">
+                <video id="video" width="320" height="240" autoplay></video>
+                <canvas id="canvas" width="320" height="240" style="display:none;"></canvas>
+                <div id="liveness-prompt" style="margin: 10px 0; font-weight: bold; color: #007BFF;"></div>
+            </div>
+            <button id="start-capture-btn" class="btn">🔒 Start Attendance Check</button>
+            <button id="capture-btn" class="btn" style="display:none;">📷 Capture Now</button>
+            <div id="result"></div>
+        </div>
+    </div>
+
+    <script>
+        // Attendance elements
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        const startCaptureBtn = document.getElementById('start-capture-btn');
+        const captureBtn = document.getElementById('capture-btn');
+        const resultDiv = document.getElementById('result');
+        const livenessPrompt = document.getElementById('liveness-prompt');
+        const checkEnrolledBtn = document.getElementById('check-enrolled-btn');
+
+        // Check enrollment status
+        checkEnrolledBtn.addEventListener('click', () => {
+            const studentId = document.getElementById('student_id').value.trim();
+            if (!studentId) {
+                resultDiv.innerHTML = '<p style="color: red;">❌ Please enter Student ID first.</p>';
+                return;
+            }
+
+            fetch(`/check_student/${studentId}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.exists) {
+                        resultDiv.innerHTML = `<p style="color: green;">✓ Student ID "${studentId}" is enrolled in the system.</p>`;
+                    } else {
+                        resultDiv.innerHTML = `<p style="color: orange;">⚠️ Student ID "${studentId}" is not enrolled. Please contact your faculty member for enrollment.</p>`;
+                    }
+                })
+                .catch(err => {
+                    console.error('Error checking enrollment:', err);
+                    resultDiv.innerHTML = '<p style="color: red;">❌ Error checking enrollment status.</p>';
+                });
+        });
+        navigator.mediaDevices.getUserMedia({ video: true })
+            .then(mediaStream => {
+                stream = mediaStream;
+                video.srcObject = stream;
+            })
+            .catch(err => {
+                console.error('Error accessing webcam:', err);
+                resultDiv.innerHTML = '<p style="color: red;">❌ Error accessing webcam. Please allow camera access.</p>';
+            });
+
+        // Start attendance check with liveness detection
+        startCaptureBtn.addEventListener('click', () => {
+            const sessionId = document.getElementById('session_id').value;
+            const studentId = document.getElementById('student_id').value;
+            if (!sessionId) {
+                resultDiv.innerHTML = '<p style="color: red;">❌ Please enter Session ID.</p>';
+                return;
+            }
+            if (!studentId) {
+                resultDiv.innerHTML = '<p style="color: red;">❌ Please enter Student ID.</p>';
+                return;
+            }
+
+            // Clear previous results
+            resultDiv.innerHTML = '';
+
+            // Start liveness detection
+            const actions = ['smile', 'blink your eyes', 'look left and right', 'nod your head'];
+            const randomAction = actions[Math.floor(Math.random() * actions.length)];
+
+            livenessPrompt.textContent = `🔒 Security Check: Please ${randomAction} for the camera, then click "Capture Now"`;
+            startCaptureBtn.style.display = 'none';
+            captureBtn.style.display = 'inline-block';
+
+            // Auto-hide prompt after 10 seconds
+            setTimeout(() => {
+                if (livenessPrompt.textContent.includes('Security Check')) {
+                    livenessPrompt.textContent = '';
+                    startCaptureBtn.style.display = 'inline-block';
+                    captureBtn.style.display = 'none';
+                }
+            }, 10000);
+        });
+
+        // Capture and send image
+        captureBtn.addEventListener('click', () => {
+            const sessionId = document.getElementById('session_id').value;
+            const studentId = document.getElementById('student_id').value;
+
+            const context = canvas.getContext('2d');
+            context.drawImage(video, 0, 0, 320, 240);
+            canvas.toBlob(blob => {
+                const formData = new FormData();
+                formData.append('session_id', sessionId);
+                formData.append('student_id', studentId);
+                formData.append('image', blob, 'capture.jpg');
+
+                // Show processing message
+                resultDiv.innerHTML = '<p style="color: blue;">🔍 Processing... Please wait.</p>';
+
+                fetch('/attendance', {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(response => response.json())
+                .then(data => {
+                    // Reset UI
+                    livenessPrompt.textContent = '';
+                    startCaptureBtn.style.display = 'inline-block';
+                    captureBtn.style.display = 'none';
+
+                    if (data.status === 'logged') {
+                        resultDiv.innerHTML = `<p style="color: green;">✓ Attendance marked for Student ID: ${data.student_id} (Confidence: ${Math.round(data.confidence * 100)}%)</p>`;
+                    } else if (data.status === 'not_enrolled') {
+                        resultDiv.innerHTML = `<p style="color: orange;">⚠️ ${data.message}</p>`;
+                    } else if (data.status === 'not_recognized') {
+                        resultDiv.innerHTML = `<p style="color: red;">❌ ${data.message}</p>`;
+                    } else if (data.status === 'security_failed') {
+                        resultDiv.innerHTML = `<p style="color: red;">🚫 ${data.message}</p>`;
+                    } else if (data.status === 'low_confidence') {
+                        resultDiv.innerHTML = `<p style="color: orange;">⚠️ ${data.message}</p>`;
+                    } else {
+                        resultDiv.innerHTML = `<p style="color: red;">❌ Error: ${data.error}</p>`;
+                    }
+                })
+                .catch(err => {
+                    console.error('Error:', err);
+                    resultDiv.innerHTML = '<p style="color: red;">❌ Error marking attendance. Please try again.</p>';
+                    // Reset UI on error
+                    livenessPrompt.textContent = '';
+                    startCaptureBtn.style.display = 'inline-block';
+                    captureBtn.style.display = 'none';
+                });
+            }, 'image/jpeg');
+        });
+    </script>
+</body>
+</html>

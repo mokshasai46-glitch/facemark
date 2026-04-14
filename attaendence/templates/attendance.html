@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Attendance Records</title>
+   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>📊 Attendance Records</h1>
+            <p>View all attendance logs</p>
+        </header>
+
+        <div class="card">
+            <h2>� Filter Records</h2>
+            <form id="filter-form" method="GET" action="/view_attendance">
+                <div style="display: flex; gap: 15px; flex-wrap: wrap; margin-bottom: 20px;">
+                    <div class="form-group" style="margin: 0;">
+                        <label>Course:</label>
+                        <select name="course" id="filter_course">
+                            <option value="">All Courses</option>
+                            {% for course in available_courses %}
+                            <option value="{{ course }}" {% if selected_course == course %}selected{% endif %}>{{ course }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="form-group" style="margin: 0;">
+                        <label>Year:</label>
+                        <select name="year" id="filter_year">
+                            <option value="">All Years</option>
+                            {% for year in available_years %}
+                            <option value="{{ year }}" {% if selected_year == year %}selected{% endif %}>{{ year }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="form-group" style="margin: 0;">
+                        <label>Section:</label>
+                        <select name="section" id="filter_section">
+                            <option value="">All Sections</option>
+                            {% for section in available_sections %}
+                            <option value="{{ section }}" {% if selected_section == section %}selected{% endif %}>{{ section }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="form-group" style="margin: 0;">
+                        <label>From Date:</label>
+                        <input type="date" name="from_date" id="filter_from_date" value="{{ selected_from_date }}">
+                    </div>
+                    <div class="form-group" style="margin: 0;">
+                        <label>To Date:</label>
+                        <input type="date" name="to_date" id="filter_to_date" value="{{ selected_to_date }}">
+                    </div>
+                    <div style="display: flex; align-items: end;">
+                        <button type="submit" class="btn" style="margin-right: 10px;">🔍 Filter</button>
+                        <a href="/view_attendance" class="btn" style="background: #6c757d;">🔄 Clear Filters</a>
+                    </div>
+                </div>
+            </form>
+        </div>
+
+        <div class="card">
+            <h2>�📋 Records</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Session ID</th>
+                        <th>Student ID</th>
+                        <th>Status</th>
+                        <th>Confidence</th>
+                        <th>Location</th>
+                        <th>Class</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for record in records %}
+                    <tr>
+                        <td>{{ record[0] }}</td>
+                        <td>{{ record[1] }}</td>
+                        <td>{{ record[2] }}</td>
+                        <td>{{ record[3] }}</td>
+                        <td>{{ record[4] }}</td>
+                        <td>{{ record[5] if record|length > 5 else '' }}</td>
+                        <td>{{ record[6] if record|length > 6 else '' }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            <br>
+            <a href="/" class="btn">🏠 Back to Home</a>
+        </div>
+    </div>
+</body>
+</html>

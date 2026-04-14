@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Faculty Login - Face Recognition Attendance</title>
+   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🔐 Faculty Login</h1>
+            <p>Access enrollment system for authorized personnel only</p>
+        </header>
+
+        <div class="card">
+            <h2>👨‍🏫 Login to Enrollment System</h2>
+            <form action="/login" method="post">
+                <div class="form-group">
+                    <label>Username:</label>
+                    <input type="text" name="username" required>
+                </div>
+                <div class="form-group">
+                    <label>Password:</label>
+                    <input type="password" id="password" name="password" required>
+                </div>
+                <div class="form-group">
+                    <input type="checkbox" id="show_password_toggle"> <label for="show_password_toggle">Show password</label>
+                </div>
+                {% if message %}
+                <div style="color: #155724; background: #d4edda; padding: 10px; border-radius: 8px; margin-bottom: 15px; border-left: 4px solid #28a745;">
+                    ✅ {{ message }}
+                </div>
+                {% endif %}
+                {% if error %}
+                <div style="color: #f44336; background: #ffebee; padding: 10px; border-radius: 8px; margin-bottom: 15px; border-left: 4px solid #f44336;">
+                    ❌ {{ error }}
+                </div>
+                {% endif %}
+                <button type="submit" class="btn">🔓 Login</button>
+            </form>
+            <div style="margin-top:15px;">
+                <a href="/forgot_password">Forgot password?</a>
+            </div>
+            <div style="margin-top: 20px; padding: 15px; background: rgba(255, 193, 7, 0.1); border-radius: 8px; border-left: 4px solid #ffc107;">
+                <h4 style="margin: 0 0 10px 0; color: #f57c00;">📋 Default Credentials:</h4>
+                <p style="margin: 5px 0;"><strong>Admin:</strong> admin / admin123</p>
+                <p style="margin: 5px 0;"><strong>Faculty:</strong> faculty / faculty123</p>
+            </div>
+        </div>
+
+        <div class="card">
+            <a href="/" class="btn">🏠 Back to Attendance</a>
+        </div>
+    </div>
+    <script>
+        document.getElementById('show_password_toggle').addEventListener('change', function() {
+            var pwd = document.getElementById('password');
+            pwd.type = this.checked ? 'text' : 'password';
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Manage Users - Face Recognition Attendance</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>👥 User Management</h1>
+            <p>Only administrators may add or modify accounts.</p>
+        </header>
+
+        <div class="card">
+            <h2>Add / Update User</h2>
+            <form action="/manage_users" method="post">
+                <div class="form-group">
+                    <label>Username:</label>
+                    <input type="text" name="username" required>
+                </div>
+                <div class="form-group">
+                    <label>Password:</label>
+                    <input type="password" id="new_password" name="password" required>
+                </div>
+                <div class="form-group">
+                    <input type="checkbox" id="show_password_toggle"> <label for="show_password_toggle">Show password</label>
+                </div>
+                <div class="form-group">
+                    <label>Role:</label>
+                    <select name="role" required>
+                        <option value="faculty">faculty</option>
+                        <option value="admin">admin</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Name (optional):</label>
+                    <input type="text" name="name">
+                </div>
+                <button type="submit" class="btn">➕ Add / Update</button>
+            </form>
+        </div>
+
+        <div class="card" style="margin-top:20px;">
+            <h2>Existing Accounts</h2>
+            <ul>
+                {% for uname, info in users.items() %}
+                <li><strong>{{ uname }}</strong> ({{ info.role }}) - {{ info.name or 'no name' }}</li>
+                {% endfor %}
+            </ul>
+        </div>
+
+        <div class="card">
+            <a href="/" class="btn">🏠 Back to Attendance</a>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('show_password_toggle').addEventListener('change', function() {
+            var pwd = document.getElementById('new_password');
+            pwd.type = this.checked ? 'text' : 'password';
+        });
+    </script>
+</body>
+</html>

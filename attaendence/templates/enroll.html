@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Student Enrollment - Face Recognition Attendance</title>
+   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>👨‍🎓 Student Enrollment</h1>
+            <p>Register new students with face recognition</p>
+            <div style="background: rgba(255, 255, 255, 0.9); padding: 10px 20px; border-radius: 20px; margin-top: 15px; display: inline-block;">
+                <span style="color: #667eea; font-weight: 600;">👤 Logged in as: {{ session.name }} ({{ session.role }})</span>
+                {% if session.role == 'admin' %}
+                    <a href="/manage_users" style="color: #007bff; text-decoration: none; margin-left: 15px; font-weight: 500;">🛠 Manage Users</a>
+                {% endif %}
+                <a href="/logout" style="color: #f44336; text-decoration: none; margin-left: 15px; font-weight: 500;">🚪 Logout</a>
+            </div>
+        </header>
+
+        <!-- Enroll Form -->
+        <div class="card">
+            <h2>📝 Enroll New Student</h2>
+            <div class="form-group">
+                <label>Student ID:</label>
+                <input type="text" id="enroll_student_id" required>
+            </div>
+            <div class="form-group">
+                <label>Year:</label>
+                <input type="text" id="enroll_year" required>
+            </div>
+            <div class="form-group">
+                <label>Section:</label>
+                <input type="text" id="enroll_section" required>
+            </div>
+            <div class="form-group">
+                <label>Course:</label>
+                <select id="enroll_course" required>
+                    <option value="">Select Course</option>
+                    <option value="cse">CSE</option>
+                    <option value="cse aimi">CSE AIMI</option>
+                    <option value="cse aids">CSE AIDS</option>
+                    <option value="cse cs">CSE CS</option>
+                    <option value="cst">CST</option>
+                    <option value="ece">ECE</option>
+                    <option value="eee">EEE</option>
+                    <option value="mechanical">Mechanical</option>
+                    <option value="others">Others</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <video id="enroll-video" width="320" height="240" autoplay playsinline muted></video>
+                <canvas id="enroll-canvas" width="320" height="240" style="display:none;"></canvas>
+                <div id="face-status" style="margin: 10px 0; padding: 10px; border-radius: 5px; background: rgba(255,255,255,0.9);">
+                    <div id="face-confidence" style="font-weight: bold; color: #28a745;">Face Confidence: --</div>
+                    <div id="face-quality" style="font-size: 0.9em; color: #666;">Position your face clearly in the frame</div>
+                </div>
+                <div id="enroll-prompt" style="margin: 10px 0; font-weight: bold; color: #28a745;"></div>
+                <div id="capture-progress" style="margin: 10px 0; font-weight: bold;"></div>
+            </div>
+            <button id="start-enroll-btn" class="btn" type="button" disabled>🚀 Start Enrollment</button>
+            <button id="capture-enroll-btn" class="btn" style="display:none;" type="button">📸 Capture Photo 1/3</button>
+            <button id="next-capture-btn" class="btn" style="display:none;" type="button">Next Photo</button>
+            <div id="enroll-result">
+                <p style="color: blue;">📷 Initializing camera... Please wait.</p>
+            </div>
+        </div>
+
+        <div class="card">
+            <a href="/" class="btn">← Back to Attendance</a>
+        </div>
+    </div>
+
+    <script>
+        // Enrollment elements
+        const enrollVideo = document.getElementById('enroll-video');
+        const enrollCanvas = document.getElementById('enroll-canvas');
+        const startEnrollBtn = document.getElementById('start-enroll-btn');
+        const captureEnrollBtn = document.getElementById('capture-enroll-btn');
+        const nextCaptureBtn = document.getElementById('next-capture-btn');
+        const enrollResultDiv = document.getElementById('enroll-result');
+        const enrollPrompt = document.getElementById('enroll-prompt');
+        const captureProgress = document.getElementById('capture-progress');
+
+        let stream = null;
+        let capturedImages = [];
+        let currentCapture = 0;
+        const totalCaptures = 3;
+        let faceAnalysisInterval = null;
+        let isAnalyzing = false;
+
+        // Function to analyze face in real-time
+        function analyzeFace() {
+            if (isAnalyzing || !stream) return;
+            
+            isAnalyzing = true;
+            const canvas = document.createElement('canvas');
+            const context = canvas.getContext('2d');
+            canvas.width = 320;
+            canvas.height = 240;
+            
+            context.drawImage(enrollVideo, 0, 0, 320, 240);
+            
+            canvas.toBlob(blob => {
+                const formData = new FormData();
+                formData.append('image', blob, 'face.jpg');
+                
+                fetch('/analyze_face', {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(response => response.json())
+                .then(data => {
+                    const confidenceDiv = document.getElementById('face-confidence');
+                    const qualityDiv = document.getElementById('face-quality');
+                    
+                    if (data.detected) {
+                        const confidence = (data.confidence * 100).toFixed(1);
+                        confidenceDiv.textContent = `Face Confidence: ${confidence}%`;
+                        confidenceDiv.style.color = confidence >= 70 ? '#28a745' : confidence >= 50 ? '#ffc107' : '#dc3545';
+                        
+                        if (confidence >= 70) {
+                            qualityDiv.textContent = '✅ Face detected clearly - Ready to capture';
+                            qualityDiv.style.color = '#28a745';
+                        } else if (confidence >= 50) {
+                            qualityDiv.textContent = '⚠️ Face detected but could be clearer';
+                            qualityDiv.style.color = '#ffc107';
+                        } else {
+                            qualityDiv.textContent = '❌ Face unclear - Adjust position/lighting';
+                            qualityDiv.style.color = '#dc3545';
+                        }
+                    } else {
+                        confidenceDiv.textContent = 'Face Confidence: No face detected';
+                        confidenceDiv.style.color = '#dc3545';
+                        qualityDiv.textContent = 'Position your face clearly in the frame';
+                        qualityDiv.style.color = '#666';
+                    }
+                })
+                .catch(err => {
+                    console.error('Face analysis error:', err);
+                })
+                .finally(() => {
+                    isAnalyzing = false;
+                });
+            }, 'image/jpeg');
+        }
+
+        // Function to access webcam
+        function accessWebcam() {
+            if (stream) {
+                // Stop existing stream
+                stream.getTracks().forEach(track => track.stop());
+            }
+            
+            navigator.mediaDevices.getUserMedia({ 
+                video: { 
+                    width: { ideal: 640 },
+                    height: { ideal: 480 },
+                    facingMode: 'user' // Use front camera
+                } 
+            })
+            .then(mediaStream => {
+                stream = mediaStream;
+                enrollVideo.srcObject = stream;
+                enrollResultDiv.innerHTML = '<p style="color: green;">✅ Camera access granted. You can now start enrollment.</p>';
+                startEnrollBtn.disabled = false;
+                
+                // Start real-time face analysis
+                faceAnalysisInterval = setInterval(analyzeFace, 1000); // Analyze every second
+            })
+            .catch(err => {
+                console.error('Error accessing webcam:', err);
+                let errorMessage = '❌ Error accessing webcam. ';
+                
+                if (err.name === 'NotAllowedError') {
+                    errorMessage += 'Please allow camera access when prompted by your browser.';
+                } else if (err.name === 'NotFoundError') {
+                    errorMessage += 'No camera found. Please connect a camera and try again.';
+                } else if (err.name === 'NotReadableError') {
+                    errorMessage += 'Camera is already in use by another application.';
+                } else if (err.name === 'OverconstrainedError') {
+                    errorMessage += 'Camera does not meet the required specifications.';
+                } else if (location.protocol !== 'https:' && location.hostname !== 'localhost') {
+                    errorMessage += 'Camera access requires HTTPS. Please use a secure connection.';
+                } else {
+                    errorMessage += 'Please check your camera permissions and try again.';
+                }
+                
+                enrollResultDiv.innerHTML = `<p style="color: red;">${errorMessage}</p>
+                    <button id="retry-camera-btn" class="btn" style="margin-top: 10px;">🔄 Retry Camera Access</button>`;
+                
+                startEnrollBtn.disabled = true;
+                
+                // Add retry button event listener
+                document.getElementById('retry-camera-btn').addEventListener('click', accessWebcam);
+            });
+        }
+
+        // Initialize webcam access
+        accessWebcam();
+
+        // Enrollment functionality
+        startEnrollBtn.addEventListener('click', () => {
+            const studentId = document.getElementById('enroll_student_id').value.trim();
+            const year = document.getElementById('enroll_year').value.trim();
+            const section = document.getElementById('enroll_section').value.trim();
+            const course = document.getElementById('enroll_course').value.trim();
+            if (!studentId || !year || !section || !course) {
+                enrollResultDiv.innerHTML = '<p style="color: red;">❌ Please fill in all fields.</p>';
+                return;
+            }
+
+            // Check if student ID already exists
+            fetch(`/check_student/${studentId}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.exists) {
+                        enrollResultDiv.innerHTML = `<p style="color: orange;">⚠️ Student ID "${studentId}" is already enrolled. Use a different ID.</p>`;
+                        return;
+                    }
+
+                    // Clear previous results
+                    enrollResultDiv.innerHTML = '';
+                    capturedImages = [];
+                    currentCapture = 0;
+
+                    // Stop real-time face analysis during capture
+                    if (faceAnalysisInterval) {
+                        clearInterval(faceAnalysisInterval);
+                        faceAnalysisInterval = null;
+                    }
+
+                    // Start enrollment process
+                    enrollPrompt.textContent = '📸 Please look directly at the camera with a clear, neutral expression';
+                    captureProgress.textContent = `Photo ${currentCapture + 1}/${totalCaptures}`;
+                    startEnrollBtn.style.display = 'none';
+                    captureEnrollBtn.style.display = 'inline-block';
+                })
+                .catch(err => {
+                    console.error('Error checking student:', err);
+                    enrollResultDiv.innerHTML = '<p style="color: red;">❌ Error checking student ID.</p>';
+                });
+        });
+
+        captureEnrollBtn.addEventListener('click', () => {
+            // Check face confidence before capturing
+            const confidenceText = document.getElementById('face-confidence').textContent;
+            const confidenceMatch = confidenceText.match(/(\d+\.?\d*)%/);
+            
+            if (confidenceMatch) {
+                const confidence = parseFloat(confidenceMatch[1]);
+                if (confidence < 50) {
+                    enrollResultDiv.innerHTML = '<p style="color: orange;">⚠️ Face confidence too low. Please adjust your position and lighting for a clearer image.</p>';
+                    return;
+                }
+            }
+            
+            const context = enrollCanvas.getContext('2d');
+            context.drawImage(enrollVideo, 0, 0, 320, 240);
+            enrollCanvas.toBlob(blob => {
+                capturedImages.push(blob);
+                currentCapture++;
+
+                if (currentCapture < totalCaptures) {
+                    // Next photo
+                    const prompts = [
+                        '📸 Turn your head slightly to the left',
+                        '📸 Turn your head slightly to the right',
+                        '📸 Smile or change expression slightly'
+                    ];
+                    enrollPrompt.textContent = prompts[currentCapture - 1] || '📸 Adjust your position';
+                    captureProgress.textContent = `Photo ${currentCapture + 1}/${totalCaptures}`;
+                    nextCaptureBtn.style.display = 'inline-block';
+                    captureEnrollBtn.style.display = 'none';
+                } else {
+                    // All captured, send to server
+                    const studentId = document.getElementById('enroll_student_id').value.trim();
+                    const year = document.getElementById('enroll_year').value.trim();
+                    const section = document.getElementById('enroll_section').value.trim();
+                    const course = document.getElementById('enroll_course').value.trim();
+
+                    const formData = new FormData();
+                    formData.append('student_id', studentId);
+                    formData.append('year', year);
+                    formData.append('section', section);
+                    formData.append('course', course);
+                    capturedImages.forEach((blob, index) => {
+                        formData.append('image', blob, `enroll${index + 1}.jpg`);
+                    });
+
+                    // Show processing message
+                    enrollResultDiv.innerHTML = '<p style="color: blue;">🔍 Processing enrollment... Please wait.</p>';
+
+                    fetch('/enroll', {
+                        method: 'POST',
+                        body: formData
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        // Reset UI
+                        enrollPrompt.textContent = '';
+                        captureProgress.textContent = '';
+                        startEnrollBtn.style.display = 'inline-block';
+                        captureEnrollBtn.style.display = 'none';
+                        nextCaptureBtn.style.display = 'none';
+
+                        if (data.status === 'enrolled') {
+                            enrollResultDiv.innerHTML = `<p style="color: green;">✓ Student "${data.student_id}" enrolled successfully!</p>`;
+                            // Clear the fields
+                            document.getElementById('enroll_student_id').value = '';
+                            document.getElementById('enroll_year').value = '';
+                            document.getElementById('enroll_section').value = '';
+                            document.getElementById('enroll_course').value = '';
+                            
+                            // Restart face analysis
+                            faceAnalysisInterval = setInterval(analyzeFace, 1000);
+                        } else {
+                            enrollResultDiv.innerHTML = `<p style="color: red;">❌ Error: ${data.error}</p>`;
+                            // Restart face analysis on error
+                            faceAnalysisInterval = setInterval(analyzeFace, 1000);
+                        }
+                    })
+                    .catch(err => {
+                        console.error('Error:', err);
+                        enrollResultDiv.innerHTML = '<p style="color: red;">❌ Error enrolling student. Please try again.</p>';
+                        // Reset UI on error
+                        enrollPrompt.textContent = '';
+                        captureProgress.textContent = '';
+                        startEnrollBtn.style.display = 'inline-block';
+                        captureEnrollBtn.style.display = 'none';
+                        nextCaptureBtn.style.display = 'none';
+                        
+                        // Restart face analysis
+                        faceAnalysisInterval = setInterval(analyzeFace, 1000);
+                    });
+                }
+            }, 'image/jpeg');
+        });
+
+        nextCaptureBtn.addEventListener('click', () => {
+            nextCaptureBtn.style.display = 'none';
+            captureEnrollBtn.style.display = 'inline-block';
+            captureEnrollBtn.textContent = `📸 Capture Photo ${currentCapture + 1}/${totalCaptures}`;
+        });
+    </script>
+</body>
+</html>
